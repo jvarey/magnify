@@ -1,0 +1,12 @@
+[package]
+name = "magnify"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = "1.0.188"
+futures = "0.3.28"
+clap = { version = "4.6.0", features = ["derive"] }
+mongodb = { version = "3.5.2", features = ["sync"] }
+tabled = "0.20.0"
+
