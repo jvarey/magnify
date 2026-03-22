@@ -1,7 +1,16 @@
 [package]
-name = "magnify"
+name = "mgfy"
 version = "0.1.0"
 edition = "2024"
+
+description = "A command line tool for inspecting MongoDB"
+license = "MIT"
+repository = "https://github.com/jvarey/magnify"
+readme = "README.md"
+
+[[bin]]
+name = "mgfy"
+path = "src/main.rs"
 
 [dependencies]
 serde = { version = "1.0.188", features = ["derive"] }
