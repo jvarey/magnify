@@ -1,12 +1,12 @@
 use crate::cli::{Cli, Commands};
 use mongodb::{
-    bson::{doc, to_document, Document},
+    bson::{Document, doc, to_document},
     sync::{Client, Collection, Database},
 };
 use serde_json::Value;
 use tabled::{
-    settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
+    settings::{Alignment, Settings, Style, object::Rows},
 };
 
 #[derive(Tabled)]
@@ -22,9 +22,9 @@ struct DetailRow {
 }
 
 impl DetailRow {
-    fn new(db: &Database, name: &String) -> Self {
-        let cmd = doc! { "collStats": name.clone() };
-        let coll: Collection<Document> = db.collection(name.as_str());
+    fn new(db: &Database, name: &str) -> Self {
+        let cmd = doc! { "collStats": name };
+        let coll: Collection<Document> = db.collection(name);
         let stats = db
             .run_command(cmd)
             .run()
@@ -34,7 +34,7 @@ impl DetailRow {
             .expect("Could not get storage size");
         let size = stats.get_i32("size").expect("Could not get size");
         Self {
-            name: name.clone(),
+            name: name.to_owned(),
             count: coll
                 .estimated_document_count()
                 .run()
@@ -47,10 +47,10 @@ impl DetailRow {
 
 fn bytes_to_string(size: i32) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
-    for i in 0..=5 {
+    for (i, unit) in units.iter().enumerate() {
         if size / (1024_i32.pow(i as u32 + 1)) == 0 {
             let sizef = size as f64 / (1024_i32.pow(i as u32) as f64);
-            return format!("{:.2}{}", sizef, units[i]);
+            return format!("{:.2}{}", sizef, unit);
         }
     }
 
@@ -116,7 +116,7 @@ pub(crate) fn example_filtered(args: &Cli) -> mongodb::error::Result<()> {
     let db = client.database(dbname.as_str());
     let coll: Collection<Document> = db.collection(collname.as_str());
     let doc =
-        string_to_bson_doc(&filter).expect("Could not convert given string to a bson Document");
+        string_to_bson_doc(filter).expect("Could not convert given string to a bson Document");
     if let Some(example) = coll.find_one(doc).run()? {
         println!("Example document from {dbname}.{collname}");
         for (key, value) in example.iter() {
@@ -153,7 +153,7 @@ pub(crate) fn list_collections(args: &Cli) -> mongodb::error::Result<()> {
     let client = connect(args)?;
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
-    if names.len() > 0 {
+    if !names.is_empty() {
         println!("Collections in {dbname}");
         for (i, name) in names.iter().enumerate() {
             println!("  {}) {}", i, name);
