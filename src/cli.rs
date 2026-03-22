@@ -18,6 +18,32 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Commands {
+    /// Returns the document count in the metadata for the collection
+    EstimateDocumentCount {
+        /// Database name
+        db: String,
+        /// Collection name
+        coll: String,
+    },
+
+    /// Get an example document
+    Example {
+        /// Database name
+        db: String,
+        /// Collection name
+        coll: String,
+    },
+
+    /// Get an example document after filtering
+    ExampleFiltered {
+        /// Database name
+        db: String,
+        /// Collection name
+        coll: String,
+        /// Filter string
+        filter: String,
+    },
+
     /// Get detailed information on each collection
     ListCollectionDetails {
         /// Database name
@@ -32,15 +58,4 @@ pub(crate) enum Commands {
 
     /// List the databases
     ListDatabases,
-
-    /// Estimate document count
-    EstimateDocumentCount,
-
-    /// Get an example document
-    Example {
-        /// Database name
-        db: String,
-        /// Collection name
-        coll: String,
-    },
 }

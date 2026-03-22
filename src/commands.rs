@@ -1,8 +1,9 @@
 use crate::cli::{Cli, Commands};
 use mongodb::{
-    bson::{doc, Document},
+    bson::{doc, to_document, Document},
     sync::{Client, Collection, Database},
 };
+use serde_json::Value;
 use tabled::{
     settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
@@ -58,6 +59,26 @@ fn bytes_to_string(size: i32) -> String {
     format!("{:.2}{}", sizef, units[5])
 }
 
+pub(crate) fn estimate_document_count(args: &Cli) -> mongodb::error::Result<()> {
+    let Commands::EstimateDocumentCount {
+        db: dbname,
+        coll: collname,
+    } = &args.command
+    else {
+        panic!("Expected a Commands::EstimateDocumentCount variant");
+    };
+
+    let client = connect(args)?;
+    let db = client.database(dbname.as_str());
+    let coll: Collection<Document> = db.collection(collname.as_str());
+    let value = coll
+        .estimated_document_count()
+        .run()
+        .expect("Could not get estimated document count for {dbname}.{collname}");
+    println!("{value}");
+    Ok(())
+}
+
 pub(crate) fn example(args: &Cli) -> mongodb::error::Result<()> {
     let Commands::Example {
         db: dbname,
@@ -77,6 +98,32 @@ pub(crate) fn example(args: &Cli) -> mongodb::error::Result<()> {
         }
     } else {
         println!("No documents in {dbname}.{collname}");
+    }
+    Ok(())
+}
+
+pub(crate) fn example_filtered(args: &Cli) -> mongodb::error::Result<()> {
+    let Commands::ExampleFiltered {
+        db: dbname,
+        coll: collname,
+        filter,
+    } = &args.command
+    else {
+        panic!("Expected a Commands::ExampleFiltered variant");
+    };
+
+    let client = connect(args)?;
+    let db = client.database(dbname.as_str());
+    let coll: Collection<Document> = db.collection(collname.as_str());
+    let doc =
+        string_to_bson_doc(&filter).expect("Could not convert given string to a bson Document");
+    if let Some(example) = coll.find_one(doc).run()? {
+        println!("Example document from {dbname}.{collname}");
+        for (key, value) in example.iter() {
+            println!("  {key}: {value}");
+        }
+    } else {
+        println!("No documents in {dbname}.{collname} matched the filter");
     }
     Ok(())
 }
@@ -131,4 +178,12 @@ pub(crate) fn connect(args: &Cli) -> mongodb::error::Result<Client> {
     let uri = format!("{}://{}:{}", args.protocol, args.host, args.port);
     let client = Client::with_uri_str(uri)?;
     Ok(client)
+}
+
+pub(crate) fn string_to_bson_doc(s: &String) -> Result<Document, Box<dyn std::error::Error>> {
+    let json_value: Value = serde_json::from_str(s.as_str())
+        .map_err(|e| format!("Failed to parse JSON string: {}; Filter string: {}", e, s))?;
+    let bson_document: Document = to_document(&json_value)
+        .map_err(|e| format!("Failed to convert JSON Value to BSON Document: {}", e))?;
+    Ok(bson_document)
 }
