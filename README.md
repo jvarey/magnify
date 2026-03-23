@@ -1,10 +1,14 @@
-# Magnify
+# `mgfy`: A command line tool for quick inspection of MongoDB
 
-A command line tool for inspecting MongoDB databases and collections.
+`mgfy` (short for magnify) is built to be a quick and easy way to get
+information from MongoDB without leaving the terminal. Have you ever forgotten
+the precise name of the collection you need to write to, wanted to know how much
+disk space is being taken used, or just needed an example document to remember
+the schema that you're working with? That's exactly what `mgfy` does.
 
 ## Usage
 
-There are a number of commands that are built into `mangify` so far:
+There are a number of commands that are built into `mgfy` so far:
   1) `estimate-document-count`: will return the document count from the
   collection metadata
   2) `example`: gets an example document from the collection without filtering
@@ -16,8 +20,8 @@ There are a number of commands that are built into `mangify` so far:
   6) `list-databases`: returns all of the database names
 
 Here's the help text:
-```bash
-$ magnify -h
+```shell
+$ mgfy -h
 Usage: magnify [OPTIONS] <COMMAND>
 
 Commands:
@@ -41,7 +45,7 @@ Options:
 
 Getting Rust to interpret an input string as JSON is not trivial. The following
 is a working example:
-```bash
-magnify example-filtered foo bar '{"Hello": {"$exists": true}}'
+```shell
+mgfy example-filtered foo bar '{"Hello": {"$exists": true}}'
 ```
 
