@@ -1,12 +1,12 @@
 use crate::cli::{Cli, Commands};
 use mongodb::{
-    bson::{Document, doc, to_document},
+    bson::{doc, to_document, Document},
     sync::{Client, Collection, Database},
 };
 use serde_json::Value;
 use tabled::{
+    settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
-    settings::{Alignment, Settings, Style, object::Rows},
 };
 
 #[derive(Tabled)]
@@ -186,4 +186,16 @@ pub(crate) fn string_to_bson_doc(s: &String) -> Result<Document, Box<dyn std::er
     let bson_document: Document = to_document(&json_value)
         .map_err(|e| format!("Failed to convert JSON Value to BSON Document: {}", e))?;
     Ok(bson_document)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bytes_to_string() {
+        assert_eq!(bytes_to_string(966), String::from("966.00B"));
+        assert_eq!(bytes_to_string(1567), String::from("1.53KB"));
+        assert_eq!(bytes_to_string(1567893), String::from("1.50MB"));
+    }
 }

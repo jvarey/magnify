@@ -5,7 +5,7 @@ edition = "2024"
 
 description = "A command line tool for inspecting MongoDB"
 license = "MIT"
-repository = "https://github.com/jvarey/magnify"
+repository = "https://github.com/jvarey/mgfy"
 readme = "README.md"
 
 [[bin]]
@@ -14,7 +14,6 @@ path = "src/main.rs"
 
 [dependencies]
 serde = { version = "1.0.188", features = ["derive"] }
-futures = "0.3.28"
 clap = { version = "4.6.0", features = ["derive"] }
 mongodb = { version = "3.5.2", features = ["sync"] }
 tabled = "0.20.0"
