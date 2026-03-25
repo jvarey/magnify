@@ -1,9 +1,13 @@
-use crate::cli::{Cli, Commands};
+use crate::cli::{Cli, Commands, CreateConnectionArgs};
+use crate::connections::{read_connections, write_connections, Connection};
+use crate::errors::ConnectionError;
 use mongodb::{
     bson::{doc, to_document, Document},
     sync::{Client, Collection, Database},
 };
 use serde_json::Value;
+use std::collections::HashMap;
+use std::error::Error;
 use tabled::{
     settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
@@ -45,6 +49,41 @@ impl DetailRow {
     }
 }
 
+pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<(), Box<dyn Error>> {
+    let mut conns = if let Some(conns) = read_connections() {
+        conns
+    } else {
+        HashMap::new()
+    };
+
+    let mut new_conn = Connection::from_opts(opts);
+
+    // error if this connection name is already in use
+    if let Some(_) = conns.get(&new_conn.name) {
+        return Err(ConnectionError::ConnectionExistsError.into());
+    }
+
+    // if there aren't any connections then this new one has to be the default
+    if conns.is_empty() {
+        eprintln!("This is the only connection, setting it to be the default");
+        new_conn.default = true;
+    }
+
+    // if the new connection is set to default then we need to make sure all the other connections
+    // are not default
+    if new_conn.default {
+        for (_name, conn) in conns.iter_mut() {
+            conn.default = false;
+        }
+    }
+
+    // update the connections hashmap and write it back to the filesystem
+    conns.insert(new_conn.name.clone(), new_conn);
+    write_connections(conns);
+
+    Ok(())
+}
+
 fn bytes_to_string(size: i32) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
     for (i, unit) in units.iter().enumerate() {
@@ -59,7 +98,7 @@ fn bytes_to_string(size: i32) -> String {
     format!("{:.2}{}", sizef, units[5])
 }
 
-pub(crate) fn estimate_document_count(args: &Cli) -> mongodb::error::Result<()> {
+pub(crate) fn estimate_document_count(args: &Cli, client: Client) -> mongodb::error::Result<()> {
     let Commands::EstimateDocumentCount {
         db: dbname,
         coll: collname,
@@ -68,7 +107,6 @@ pub(crate) fn estimate_document_count(args: &Cli) -> mongodb::error::Result<()> 
         panic!("Expected a Commands::EstimateDocumentCount variant");
     };
 
-    let client = connect(args)?;
     let db = client.database(dbname.as_str());
     let coll: Collection<Document> = db.collection(collname.as_str());
     let value = coll
@@ -79,7 +117,7 @@ pub(crate) fn estimate_document_count(args: &Cli) -> mongodb::error::Result<()> 
     Ok(())
 }
 
-pub(crate) fn example(args: &Cli) -> mongodb::error::Result<()> {
+pub(crate) fn example(args: &Cli, client: Client) -> mongodb::error::Result<()> {
     let Commands::Example {
         db: dbname,
         coll: collname,
@@ -88,11 +126,9 @@ pub(crate) fn example(args: &Cli) -> mongodb::error::Result<()> {
         panic!("Expected a Commands::Example variant");
     };
 
-    let client = connect(args)?;
     let db = client.database(dbname.as_str());
     let coll: Collection<Document> = db.collection(collname.as_str());
     if let Some(example) = coll.find_one(doc! {}).run()? {
-        println!("Example document from {dbname}.{collname}");
         for (key, value) in example.iter() {
             println!("  {key}: {value}");
         }
@@ -102,7 +138,7 @@ pub(crate) fn example(args: &Cli) -> mongodb::error::Result<()> {
     Ok(())
 }
 
-pub(crate) fn example_filtered(args: &Cli) -> mongodb::error::Result<()> {
+pub(crate) fn example_filtered(args: &Cli, client: Client) -> mongodb::error::Result<()> {
     let Commands::ExampleFiltered {
         db: dbname,
         coll: collname,
@@ -112,13 +148,11 @@ pub(crate) fn example_filtered(args: &Cli) -> mongodb::error::Result<()> {
         panic!("Expected a Commands::ExampleFiltered variant");
     };
 
-    let client = connect(args)?;
     let db = client.database(dbname.as_str());
     let coll: Collection<Document> = db.collection(collname.as_str());
     let doc =
         string_to_bson_doc(filter).expect("Could not convert given string to a bson Document");
     if let Some(example) = coll.find_one(doc).run()? {
-        println!("Example document from {dbname}.{collname}");
         for (key, value) in example.iter() {
             println!("  {key}: {value}");
         }
@@ -128,11 +162,10 @@ pub(crate) fn example_filtered(args: &Cli) -> mongodb::error::Result<()> {
     Ok(())
 }
 
-pub(crate) fn list_collection_details(args: &Cli) -> mongodb::error::Result<()> {
+pub(crate) fn list_collection_details(args: &Cli, client: Client) -> mongodb::error::Result<()> {
     let Commands::ListCollectionDetails { db: dbname } = &args.command else {
         panic!("Expected a Commands::ListCollectionDetails variant");
     };
-    let client = connect(args)?;
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
     let rows: Vec<DetailRow> = names.iter().map(|r| DetailRow::new(&db, r)).collect();
@@ -146,15 +179,13 @@ pub(crate) fn list_collection_details(args: &Cli) -> mongodb::error::Result<()> 
     Ok(())
 }
 
-pub(crate) fn list_collections(args: &Cli) -> mongodb::error::Result<()> {
+pub(crate) fn list_collections(args: &Cli, client: Client) -> mongodb::error::Result<()> {
     let Commands::ListCollections { db: dbname } = &args.command else {
         panic!("Expected a Commands::ListCollections variant");
     };
-    let client = connect(args)?;
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
     if !names.is_empty() {
-        println!("Collections in {dbname}");
         for (i, name) in names.iter().enumerate() {
             println!("  {}) {}", i, name);
         }
@@ -164,20 +195,28 @@ pub(crate) fn list_collections(args: &Cli) -> mongodb::error::Result<()> {
     Ok(())
 }
 
-pub(crate) fn list_databases(args: &Cli) -> mongodb::error::Result<()> {
-    let client = connect(args)?;
-    let db_names = client.list_database_names().run()?;
-    println!("Databases:");
-    for (i, db) in db_names.iter().enumerate() {
-        println!("  {}) {}", i, db);
+pub(crate) fn list_connections() -> Result<(), Box<dyn Error>> {
+    if let Some(conns) = read_connections() {
+        let rows: Vec<&Connection> = conns.iter().map(|(_i, conn)| conn).collect();
+        let table_config = Settings::default()
+            .with(Style::modern_rounded())
+            .with(Alignment::right());
+        let mut table = Table::new(rows);
+        table.with(table_config);
+        table.modify(Rows::first(), Alignment::center());
+        println!("{}", table);
+    } else {
+        println!("No connections found");
     }
     Ok(())
 }
 
-pub(crate) fn connect(args: &Cli) -> mongodb::error::Result<Client> {
-    let uri = format!("{}://{}:{}", args.protocol, args.host, args.port);
-    let client = Client::with_uri_str(uri)?;
-    Ok(client)
+pub(crate) fn list_databases(_args: &Cli, client: Client) -> mongodb::error::Result<()> {
+    let db_names = client.list_database_names().run()?;
+    for (i, db) in db_names.iter().enumerate() {
+        println!("  {}) {}", i, db);
+    }
+    Ok(())
 }
 
 pub(crate) fn string_to_bson_doc(s: &String) -> Result<Document, Box<dyn std::error::Error>> {

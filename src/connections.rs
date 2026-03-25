@@ -1,0 +1,103 @@
+use crate::cli::{Cli, CreateConnectionArgs};
+use crate::errors::ConnectionError;
+use directories::ProjectDirs;
+use mongodb::sync::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs;
+use std::io::{BufWriter, Write};
+use tabled::Tabled;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tabled)]
+pub(crate) struct Connection {
+    #[tabled(rename = "Name")]
+    pub name: String,
+    #[tabled(rename = "Host")]
+    pub host: String,
+    #[tabled(rename = "Port")]
+    pub port: i32,
+    #[tabled(rename = "Protocol")]
+    pub protocol: String,
+    #[tabled(rename = "Default")]
+    pub default: bool,
+}
+
+impl Connection {
+    pub(crate) fn from_cli(args: &Cli) -> Result<Self, Box<dyn Error>> {
+        // the real version of this method will load the connections from the filesystem and choose
+        // the connection that was either chosen by the user at the command line or the default
+        let conn = if let Some(conns) = read_connections() {
+            if let Some(name) = &args.name {
+                get_by_name(&conns, &name)?.clone()
+            } else {
+                get_default_connection(&conns)?.clone()
+            }
+        } else {
+            return Err(ConnectionError::NoConnectionsError.into());
+        };
+
+        Ok(conn)
+    }
+
+    pub(crate) fn from_opts(opts: CreateConnectionArgs) -> Self {
+        Self {
+            name: opts.name.clone(),
+            host: opts.host.clone(),
+            port: opts.port,
+            protocol: opts.protocol.clone(),
+            default: opts.default,
+        }
+    }
+
+    pub(crate) fn to_uri(&self) -> String {
+        format!("{}://{}:{}", self.protocol, self.host, self.port)
+    }
+
+    pub(crate) fn connect(&self) -> mongodb::error::Result<Client> {
+        Client::with_uri_str(self.to_uri())
+    }
+}
+
+fn get_by_name<'a>(
+    conns: &'a HashMap<String, Connection>,
+    name: &String,
+) -> Result<&'a Connection, Box<dyn Error>> {
+    conns
+        .get(name)
+        .ok_or_else(|| ConnectionError::ConnectionDoesNotExistError.into())
+}
+
+fn get_default_connection(
+    conns: &HashMap<String, Connection>,
+) -> Result<&Connection, Box<dyn Error>> {
+    for (_name, conn) in conns {
+        if conn.default {
+            return Ok(conn);
+        }
+    }
+    Err(ConnectionError::NoDefaultConnectionError.into())
+}
+
+pub(crate) fn read_connections() -> Option<HashMap<String, Connection>> {
+    let proj_dir =
+        ProjectDirs::from("com", "jvarey", "mgfy").expect("Could not parse project directory");
+    let fname = proj_dir.data_dir().join("connections.json");
+    if fname.exists() {
+        let content = fs::read_to_string(fname).expect("Could not read connections.json");
+        return Some(serde_json::from_str(&content).expect("Could not parse JSON"));
+    }
+    None
+}
+
+pub(crate) fn write_connections(conns: HashMap<String, Connection>) {
+    let proj_dir =
+        ProjectDirs::from("com", "jvarey", "mgfy").expect("Could not parse project directory");
+    fs::create_dir_all(proj_dir.data_dir()).expect("Could not create data directory");
+    let fname = proj_dir.data_dir().join("connections.json");
+
+    let file = fs::File::create(fname).expect("Could not create file connections.json");
+    let mut writer = BufWriter::new(file);
+    serde_json::to_writer(&mut writer, &conns).expect("Failed to write to connections.json");
+    writer.flush().expect("Failed to flush writer");
+}

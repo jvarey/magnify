@@ -1,3 +1,6 @@
-fn main() -> mongodb::error::Result<()> {
-    mgfy::main()
+fn main() {
+    match mgfy::main() {
+        Err(e) => eprintln!("Error: {}", e),
+        _ => {}
+    }
 }
