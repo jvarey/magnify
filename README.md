@@ -3,8 +3,8 @@
 `mgfy` (short for magnify) is built to be a quick and easy way to get
 information from MongoDB without leaving the terminal. Have you ever forgotten
 the precise name of the collection you need to write to, wanted to know how much
-disk space is being taken used, or just needed an example document to remember
-the schema that you're working with? That's exactly what `mgfy` does.
+disk space is being used, or just needed an example document to remember the 
+schema that you're working with? That's exactly what `mgfy` does.
 
 ## Installation
 
