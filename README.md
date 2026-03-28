@@ -23,8 +23,7 @@ separate connections. Each connection is defined by the following fields:
 
 | Field    | Description |
 |----------|-------------|
-| name     | A unique name for the connection; this will be used to specify which
-connection to use in subsequent commands |
+| name     | A unique name for the connection; this will be used to specify which connection to use in subsequent commands |
 | host     | hostname used in the connection string (e.g. "localhost") |
 | port     | port used in the connection string (e.g. 27017, MongoDB's default |
 | protocol | The first portion of the connection string (default: "mongodb")|
@@ -53,23 +52,25 @@ There are a number of commands that are built into `mgfy` so far:
 Here's the help text:
 ```shell
 $ mgfy -h
-Usage: magnify [OPTIONS] <COMMAND>
+A command line tool for inspecting MongoDB
+
+Usage: mgfy [OPTIONS] <COMMAND>
 
 Commands:
-  estimate-document-count  Estimate document count
+  create-connection        Create a new connection
+  estimate-document-count  Returns the document count in the metadata for the collection
   example                  Get an example document
   example-filtered         Get an example document after filtering
   list-collection-details  Get detailed information on each collection
   list-collections         List the collections in a database
+  list-connections         List connections
   list-databases           List the databases
   help                     Print this message or the help of the given subcommand(s)
 
 Options:
-      --protocol <PROTOCOL>  [default: mongodb]
-      --host <HOST>          [default: localhost]
-      --port <PORT>          [default: 20667]
-  -h, --help                 Print help
-  -V, --version              Print version
+  -n, --name <NAME>  Name of the connection to use (see list-connections command)
+  -h, --help         Print help
+  -V, --version      Print versio
 ```
 
 ## Filtering
