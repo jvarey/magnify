@@ -1,15 +1,15 @@
 use crate::cli::CreateConnectionArgs;
-use crate::connections::{read_connections, write_connections, Connection};
+use crate::connections::{Connection, read_connections, write_connections};
 use crate::errors::ConnectionError;
 use mongodb::{
-    bson::{doc, to_document, Document},
+    bson::{self, Document, doc, to_document},
     sync::{Client, Collection, Database},
 };
 use serde_json::Value;
 use std::error::Error;
 use tabled::{
-    settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
+    settings::{Alignment, Settings, Style, object::Rows},
 };
 
 #[derive(Tabled)]
@@ -26,16 +26,34 @@ struct DetailRow {
 
 impl DetailRow {
     fn try_new(db: &Database, name: &str) -> Result<Self, Box<dyn Error>> {
-        let cmd = doc! { "collStats": name, "scale": 1024 };
+        let cmd = doc! { "collStats": name, "scale": 1 };
         let coll: Collection<Document> = db.collection(name);
         let stats = db.run_command(cmd).run()?;
-        let storage_size = stats.get_i32("storageSize")?;
-        let size = stats.get_i32("size")?;
+        let _ = dbg!(stats.get("storageSize"));
+        // ordinarily we would just do `stats.get_i32("storageSize")?`, but the result has a decent
+        // chance of overflowing an i32. if it would overflow, mongo actually saves sizes as i64.
+        // this way we always get an i64 out of mongo.
+        let storage_size = stats
+            .get("storageSize")
+            .and_then(|v| match v {
+                bson::Bson::Int32(n) => Some(*n as i64),
+                bson::Bson::Int64(n) => Some(*n),
+                _ => None,
+            })
+            .ok_or("storageSize missing or not numeric")?;
+        let size = stats
+            .get("size")
+            .and_then(|v| match v {
+                bson::Bson::Int32(n) => Some(*n as i64),
+                bson::Bson::Int64(n) => Some(*n),
+                _ => None,
+            })
+            .ok_or("size missing or not numeric")?;
         Ok(Self {
             name: name.to_owned(),
             count: coll.estimated_document_count().run()?,
-            size: kbytes_to_string(size),
-            storage_size: kbytes_to_string(storage_size),
+            size: bytes_to_string(size),
+            storage_size: bytes_to_string(storage_size),
         })
     }
 }
@@ -69,18 +87,18 @@ pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<(), Box<dy
     Ok(())
 }
 
-fn kbytes_to_string(size: i32) -> String {
-    let units = ["KB", "MB", "GB", "TB", "PB"];
+fn bytes_to_string(size: i64) -> String {
+    let units = ["B", "KB", "MB", "GB", "TB", "PB"];
     for (i, unit) in units.iter().enumerate() {
-        if size / (1024_i32).pow(i as u32 + 1) == 0 {
-            let sizef = size as f64 / (1024_i32.pow(i as u32) as f64);
+        if size / (1024_i64).pow(i as u32 + 1) == 0 {
+            let sizef = size as f64 / (1024_i64.pow(i as u32) as f64);
             return format!("{:.2}{}", sizef, unit);
         }
     }
 
     // more than 1024 PB, just use PB
-    let sizef = size as f64 / (1024_i32.pow(5) as f64);
-    format!("{:.2}{}", sizef, units[4])
+    let sizef = size as f64 / (1024_i64.pow(5) as f64);
+    format!("{:.2}{}", sizef, units[5])
 }
 
 pub(crate) fn estimate_document_count(
@@ -90,10 +108,7 @@ pub(crate) fn estimate_document_count(
 ) -> mongodb::error::Result<()> {
     let db = client.database(dbname);
     let coll: Collection<Document> = db.collection(collname);
-    let value = coll
-        .estimated_document_count()
-        .run()
-        .expect("Could not get estimated document count for {dbname}.{collname}");
+    let value = coll.estimated_document_count().run()?;
     println!("{value}");
     Ok(())
 }
@@ -134,10 +149,6 @@ pub(crate) fn example_filtered(
 pub(crate) fn list_collection_details(dbname: &str, client: Client) -> Result<(), Box<dyn Error>> {
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
-    //let rows: Vec<DetailRow> = names
-    //    .iter()
-    //    .filter_map(|r| DetailRow::try_new(&db, r).ok())
-    //    .collect();
     let mut rows = Vec::new();
     for name in &names {
         rows.push(DetailRow::try_new(&db, name)?);
@@ -157,7 +168,7 @@ pub(crate) fn list_collections(dbname: &str, client: Client) -> mongodb::error::
     let names = db.list_collection_names().run()?;
     if !names.is_empty() {
         for (i, name) in names.iter().enumerate() {
-            println!("  {}) {}", i, name);
+            println!("  {}) {}", i + 1, name);
         }
     } else {
         println!("No collections in {dbname}");
@@ -184,7 +195,7 @@ pub(crate) fn list_connections() -> Result<(), Box<dyn Error>> {
 pub(crate) fn list_databases(client: Client) -> mongodb::error::Result<()> {
     let db_names = client.list_database_names().run()?;
     for (i, db) in db_names.iter().enumerate() {
-        println!("  {}) {}", i, db);
+        println!("  {}) {}", i + 1, db);
     }
     Ok(())
 }
@@ -203,8 +214,8 @@ mod tests {
 
     #[test]
     fn test_bytes_to_string() {
-        assert_eq!(kbytes_to_string(966), String::from("966.00KB"));
-        assert_eq!(kbytes_to_string(1567), String::from("1.53MB"));
-        assert_eq!(kbytes_to_string(1567893), String::from("1.50GB"));
+        assert_eq!(bytes_to_string(966), String::from("966.00B"));
+        assert_eq!(bytes_to_string(1567), String::from("1.53KB"));
+        assert_eq!(bytes_to_string(1567893), String::from("1.50MB"));
     }
 }
