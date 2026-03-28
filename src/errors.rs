@@ -3,28 +3,28 @@ use std::fmt;
 
 #[derive(Debug)]
 pub(crate) enum ConnectionError {
-    ConnectionDoesNotExistError,
-    ConnectionExistsError,
-    NoConnectionsError,
-    NoDefaultConnectionError,
+    ConnectionDoesNotExist,
+    ConnectionExists,
+    NoConnections,
+    NoDefaultConnection,
 }
 
 impl fmt::Display for ConnectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConnectionError::ConnectionDoesNotExistError => {
+            ConnectionError::ConnectionDoesNotExist => {
                 write!(f, "There is no connection by that name")
             }
-            ConnectionError::ConnectionExistsError => {
+            ConnectionError::ConnectionExists => {
                 write!(f, "A connection with this name already exists")
             }
-            ConnectionError::NoDefaultConnectionError => {
+            ConnectionError::NoDefaultConnection => {
                 write!(
                     f,
                     "There are no connections saved that are flagged as default"
                 )
             }
-            ConnectionError::NoConnectionsError => {
+            ConnectionError::NoConnections => {
                 write!(f, "There are no saved connections")
             }
         }

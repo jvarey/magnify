@@ -1,6 +1,5 @@
 fn main() {
-    match mgfy::main() {
-        Err(e) => eprintln!("Error: {}", e),
-        _ => {}
+    if let Err(e) = mgfy::main() {
+        eprintln!("Error: {}", e);
     }
 }

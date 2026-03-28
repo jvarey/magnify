@@ -63,15 +63,15 @@ pub(crate) enum Commands {
 
 impl Commands {
     pub(crate) fn requires_connection(&self) -> bool {
-        match self {
-            Commands::ListDatabases => true,
-            Commands::Example { .. } => true,
-            Commands::ExampleFiltered { .. } => true,
-            Commands::ListCollections { .. } => true,
-            Commands::EstimateDocumentCount { .. } => true,
-            Commands::ListCollectionDetails { .. } => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Commands::ListDatabases
+                | Commands::Example { .. }
+                | Commands::ExampleFiltered { .. }
+                | Commands::ListCollections { .. }
+                | Commands::EstimateDocumentCount { .. }
+                | Commands::ListCollectionDetails { .. }
+        )
     }
 }
 

@@ -29,12 +29,12 @@ impl Connection {
         // the connection that was either chosen by the user at the command line or the default
         let conn = if let Some(conns) = read_connections() {
             if let Some(name) = &args.name {
-                get_by_name(&conns, &name)?.clone()
+                get_by_name(&conns, name)?.clone()
             } else {
                 get_default_connection(&conns)?.clone()
             }
         } else {
-            return Err(ConnectionError::NoConnectionsError.into());
+            return Err(ConnectionError::NoConnections.into());
         };
 
         Ok(conn)
@@ -65,18 +65,18 @@ fn get_by_name<'a>(
 ) -> Result<&'a Connection, Box<dyn Error>> {
     conns
         .get(name)
-        .ok_or_else(|| ConnectionError::ConnectionDoesNotExistError.into())
+        .ok_or_else(|| ConnectionError::ConnectionDoesNotExist.into())
 }
 
 fn get_default_connection(
     conns: &HashMap<String, Connection>,
 ) -> Result<&Connection, Box<dyn Error>> {
-    for (_name, conn) in conns {
+    for conn in conns.values() {
         if conn.default {
             return Ok(conn);
         }
     }
-    Err(ConnectionError::NoDefaultConnectionError.into())
+    Err(ConnectionError::NoDefaultConnection.into())
 }
 
 pub(crate) fn read_connections() -> Option<HashMap<String, Connection>> {

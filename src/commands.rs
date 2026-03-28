@@ -1,16 +1,15 @@
 use crate::cli::{Cli, Commands, CreateConnectionArgs};
-use crate::connections::{read_connections, write_connections, Connection};
+use crate::connections::{Connection, read_connections, write_connections};
 use crate::errors::ConnectionError;
 use mongodb::{
-    bson::{doc, to_document, Document},
+    bson::{Document, doc, to_document},
     sync::{Client, Collection, Database},
 };
 use serde_json::Value;
-use std::collections::HashMap;
 use std::error::Error;
 use tabled::{
-    settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
+    settings::{Alignment, Settings, Style, object::Rows},
 };
 
 #[derive(Tabled)]
@@ -50,18 +49,12 @@ impl DetailRow {
 }
 
 pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<(), Box<dyn Error>> {
-    let mut conns = if let Some(conns) = read_connections() {
-        conns
-    } else {
-        HashMap::new()
-    };
-
+    let mut conns = read_connections().unwrap_or_default();
     let mut new_conn = Connection::from_opts(opts);
 
-    // error if this connection name is already in use
-    if let Some(_) = conns.get(&new_conn.name) {
-        return Err(ConnectionError::ConnectionExistsError.into());
-    }
+    if conns.contains_key(&new_conn.name) {
+        return Err(ConnectionError::ConnectionExists.into());
+    };
 
     // if there aren't any connections then this new one has to be the default
     if conns.is_empty() {
@@ -197,7 +190,8 @@ pub(crate) fn list_collections(args: &Cli, client: Client) -> mongodb::error::Re
 
 pub(crate) fn list_connections() -> Result<(), Box<dyn Error>> {
     if let Some(conns) = read_connections() {
-        let rows: Vec<&Connection> = conns.iter().map(|(_i, conn)| conn).collect();
+        //let rows: Vec<&Connection> = conns.iter().map(|(_i, conn)| conn).collect();
+        let rows = conns.values();
         let table_config = Settings::default()
             .with(Style::modern_rounded())
             .with(Alignment::right());
