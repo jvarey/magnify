@@ -7,6 +7,7 @@ pub(crate) enum ConnectionError {
     ConnectionExists,
     NoConnections,
     NoDefaultConnection,
+    WriteConnection,
 }
 
 impl fmt::Display for ConnectionError {
@@ -26,6 +27,9 @@ impl fmt::Display for ConnectionError {
             }
             ConnectionError::NoConnections => {
                 write!(f, "There are no saved connections")
+            }
+            ConnectionError::WriteConnection => {
+                write!(f, "Could not write connections file")
             }
         }
     }

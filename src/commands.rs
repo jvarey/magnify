@@ -1,15 +1,15 @@
-use crate::cli::{Cli, Commands, CreateConnectionArgs};
-use crate::connections::{Connection, read_connections, write_connections};
+use crate::cli::CreateConnectionArgs;
+use crate::connections::{read_connections, write_connections, Connection};
 use crate::errors::ConnectionError;
 use mongodb::{
-    bson::{Document, doc, to_document},
+    bson::{doc, to_document, Document},
     sync::{Client, Collection, Database},
 };
 use serde_json::Value;
 use std::error::Error;
 use tabled::{
+    settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
-    settings::{Alignment, Settings, Style, object::Rows},
 };
 
 #[derive(Tabled)]
@@ -25,26 +25,18 @@ struct DetailRow {
 }
 
 impl DetailRow {
-    fn new(db: &Database, name: &str) -> Self {
-        let cmd = doc! { "collStats": name };
+    fn try_new(db: &Database, name: &str) -> Result<Self, Box<dyn Error>> {
+        let cmd = doc! { "collStats": name, "scale": 1024 };
         let coll: Collection<Document> = db.collection(name);
-        let stats = db
-            .run_command(cmd)
-            .run()
-            .expect("Could not get collection stats");
-        let storage_size = stats
-            .get_i32("storageSize")
-            .expect("Could not get storage size");
-        let size = stats.get_i32("size").expect("Could not get size");
-        Self {
+        let stats = db.run_command(cmd).run()?;
+        let storage_size = stats.get_i32("storageSize")?;
+        let size = stats.get_i32("size")?;
+        Ok(Self {
             name: name.to_owned(),
-            count: coll
-                .estimated_document_count()
-                .run()
-                .expect("Could not get estimated document count"),
-            size: bytes_to_string(size),
-            storage_size: bytes_to_string(storage_size),
-        }
+            count: coll.estimated_document_count().run()?,
+            size: kbytes_to_string(size),
+            storage_size: kbytes_to_string(storage_size),
+        })
     }
 }
 
@@ -72,15 +64,15 @@ pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<(), Box<dy
 
     // update the connections hashmap and write it back to the filesystem
     conns.insert(new_conn.name.clone(), new_conn);
-    write_connections(conns);
+    write_connections(conns)?;
 
     Ok(())
 }
 
-fn bytes_to_string(size: i32) -> String {
-    let units = ["B", "KB", "MB", "GB", "TB", "PB"];
+fn kbytes_to_string(size: i32) -> String {
+    let units = ["KB", "MB", "GB", "TB", "PB"];
     for (i, unit) in units.iter().enumerate() {
-        if size / (1024_i32.pow(i as u32 + 1)) == 0 {
+        if size / (1024_i32).pow(i as u32 + 1) == 0 {
             let sizef = size as f64 / (1024_i32.pow(i as u32) as f64);
             return format!("{:.2}{}", sizef, unit);
         }
@@ -88,20 +80,16 @@ fn bytes_to_string(size: i32) -> String {
 
     // more than 1024 PB, just use PB
     let sizef = size as f64 / (1024_i32.pow(5) as f64);
-    format!("{:.2}{}", sizef, units[5])
+    format!("{:.2}{}", sizef, units[4])
 }
 
-pub(crate) fn estimate_document_count(args: &Cli, client: Client) -> mongodb::error::Result<()> {
-    let Commands::EstimateDocumentCount {
-        db: dbname,
-        coll: collname,
-    } = &args.command
-    else {
-        panic!("Expected a Commands::EstimateDocumentCount variant");
-    };
-
-    let db = client.database(dbname.as_str());
-    let coll: Collection<Document> = db.collection(collname.as_str());
+pub(crate) fn estimate_document_count(
+    dbname: &str,
+    collname: &str,
+    client: Client,
+) -> mongodb::error::Result<()> {
+    let db = client.database(dbname);
+    let coll: Collection<Document> = db.collection(collname);
     let value = coll
         .estimated_document_count()
         .run()
@@ -110,17 +98,9 @@ pub(crate) fn estimate_document_count(args: &Cli, client: Client) -> mongodb::er
     Ok(())
 }
 
-pub(crate) fn example(args: &Cli, client: Client) -> mongodb::error::Result<()> {
-    let Commands::Example {
-        db: dbname,
-        coll: collname,
-    } = &args.command
-    else {
-        panic!("Expected a Commands::Example variant");
-    };
-
-    let db = client.database(dbname.as_str());
-    let coll: Collection<Document> = db.collection(collname.as_str());
+pub(crate) fn example(dbname: &str, collname: &str, client: Client) -> mongodb::error::Result<()> {
+    let db = client.database(dbname);
+    let coll: Collection<Document> = db.collection(collname);
     if let Some(example) = coll.find_one(doc! {}).run()? {
         for (key, value) in example.iter() {
             println!("  {key}: {value}");
@@ -131,18 +111,14 @@ pub(crate) fn example(args: &Cli, client: Client) -> mongodb::error::Result<()> 
     Ok(())
 }
 
-pub(crate) fn example_filtered(args: &Cli, client: Client) -> mongodb::error::Result<()> {
-    let Commands::ExampleFiltered {
-        db: dbname,
-        coll: collname,
-        filter,
-    } = &args.command
-    else {
-        panic!("Expected a Commands::ExampleFiltered variant");
-    };
-
-    let db = client.database(dbname.as_str());
-    let coll: Collection<Document> = db.collection(collname.as_str());
+pub(crate) fn example_filtered(
+    dbname: &str,
+    collname: &str,
+    filter: &str,
+    client: Client,
+) -> mongodb::error::Result<()> {
+    let db = client.database(dbname);
+    let coll: Collection<Document> = db.collection(collname);
     let doc =
         string_to_bson_doc(filter).expect("Could not convert given string to a bson Document");
     if let Some(example) = coll.find_one(doc).run()? {
@@ -155,13 +131,17 @@ pub(crate) fn example_filtered(args: &Cli, client: Client) -> mongodb::error::Re
     Ok(())
 }
 
-pub(crate) fn list_collection_details(args: &Cli, client: Client) -> mongodb::error::Result<()> {
-    let Commands::ListCollectionDetails { db: dbname } = &args.command else {
-        panic!("Expected a Commands::ListCollectionDetails variant");
-    };
+pub(crate) fn list_collection_details(dbname: &str, client: Client) -> Result<(), Box<dyn Error>> {
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
-    let rows: Vec<DetailRow> = names.iter().map(|r| DetailRow::new(&db, r)).collect();
+    //let rows: Vec<DetailRow> = names
+    //    .iter()
+    //    .filter_map(|r| DetailRow::try_new(&db, r).ok())
+    //    .collect();
+    let mut rows = Vec::new();
+    for name in &names {
+        rows.push(DetailRow::try_new(&db, name)?);
+    }
     let table_config = Settings::default()
         .with(Style::modern_rounded())
         .with(Alignment::right());
@@ -172,10 +152,7 @@ pub(crate) fn list_collection_details(args: &Cli, client: Client) -> mongodb::er
     Ok(())
 }
 
-pub(crate) fn list_collections(args: &Cli, client: Client) -> mongodb::error::Result<()> {
-    let Commands::ListCollections { db: dbname } = &args.command else {
-        panic!("Expected a Commands::ListCollections variant");
-    };
+pub(crate) fn list_collections(dbname: &str, client: Client) -> mongodb::error::Result<()> {
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
     if !names.is_empty() {
@@ -190,7 +167,6 @@ pub(crate) fn list_collections(args: &Cli, client: Client) -> mongodb::error::Re
 
 pub(crate) fn list_connections() -> Result<(), Box<dyn Error>> {
     if let Some(conns) = read_connections() {
-        //let rows: Vec<&Connection> = conns.iter().map(|(_i, conn)| conn).collect();
         let rows = conns.values();
         let table_config = Settings::default()
             .with(Style::modern_rounded())
@@ -205,7 +181,7 @@ pub(crate) fn list_connections() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub(crate) fn list_databases(_args: &Cli, client: Client) -> mongodb::error::Result<()> {
+pub(crate) fn list_databases(client: Client) -> mongodb::error::Result<()> {
     let db_names = client.list_database_names().run()?;
     for (i, db) in db_names.iter().enumerate() {
         println!("  {}) {}", i, db);
@@ -213,8 +189,8 @@ pub(crate) fn list_databases(_args: &Cli, client: Client) -> mongodb::error::Res
     Ok(())
 }
 
-pub(crate) fn string_to_bson_doc(s: &String) -> Result<Document, Box<dyn std::error::Error>> {
-    let json_value: Value = serde_json::from_str(s.as_str())
+pub(crate) fn string_to_bson_doc(s: &str) -> Result<Document, Box<dyn std::error::Error>> {
+    let json_value: Value = serde_json::from_str(s)
         .map_err(|e| format!("Failed to parse JSON string: {}; Filter string: {}", e, s))?;
     let bson_document: Document = to_document(&json_value)
         .map_err(|e| format!("Failed to convert JSON Value to BSON Document: {}", e))?;
@@ -227,8 +203,8 @@ mod tests {
 
     #[test]
     fn test_bytes_to_string() {
-        assert_eq!(bytes_to_string(966), String::from("966.00B"));
-        assert_eq!(bytes_to_string(1567), String::from("1.53KB"));
-        assert_eq!(bytes_to_string(1567893), String::from("1.50MB"));
+        assert_eq!(kbytes_to_string(966), String::from("966.00KB"));
+        assert_eq!(kbytes_to_string(1567), String::from("1.53MB"));
+        assert_eq!(kbytes_to_string(1567893), String::from("1.50GB"));
     }
 }

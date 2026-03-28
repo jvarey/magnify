@@ -13,9 +13,14 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Commands {
-    /// Create a new connection
-    CreateConnection(CreateConnectionArgs),
+    #[command(flatten)]
+    Connected(ConnectedCommands),
+    #[command(flatten)]
+    Standalone(StandaloneCommands),
+}
 
+#[derive(Subcommand)]
+pub(crate) enum ConnectedCommands {
     /// Returns the document count in the metadata for the collection
     EstimateDocumentCount {
         /// Database name
@@ -54,25 +59,16 @@ pub(crate) enum Commands {
         db: String,
     },
 
-    /// List connections
-    ListConnections,
-
     /// List the databases
     ListDatabases,
 }
 
-impl Commands {
-    pub(crate) fn requires_connection(&self) -> bool {
-        matches!(
-            self,
-            Commands::ListDatabases
-                | Commands::Example { .. }
-                | Commands::ExampleFiltered { .. }
-                | Commands::ListCollections { .. }
-                | Commands::EstimateDocumentCount { .. }
-                | Commands::ListCollectionDetails { .. }
-        )
-    }
+#[derive(Subcommand)]
+pub(crate) enum StandaloneCommands {
+    /// Create a new connection
+    CreateConnection(CreateConnectionArgs),
+    /// List connections
+    ListConnections,
 }
 
 #[derive(Args)]
