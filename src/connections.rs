@@ -1,10 +1,10 @@
 use crate::cli::CreateConnectionArgs;
 use crate::errors::ConnectionError;
+use anyhow::Result;
 use directories::ProjectDirs;
 use mongodb::sync::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 use std::io::{BufWriter, Write};
 use tabled::Tabled;
@@ -24,7 +24,7 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) fn from_name(name_opt: Option<&str>) -> Result<Self, Box<dyn Error>> {
+    pub(crate) fn from_name(name_opt: Option<&str>) -> Result<Self> {
         let conn = if let Some(conns) = read_connections() {
             if let Some(name) = name_opt {
                 get_by_name(&conns, name)?.clone()
@@ -57,18 +57,13 @@ impl Connection {
     }
 }
 
-fn get_by_name<'a>(
-    conns: &'a HashMap<String, Connection>,
-    name: &str,
-) -> Result<&'a Connection, Box<dyn Error>> {
+fn get_by_name<'a>(conns: &'a HashMap<String, Connection>, name: &str) -> Result<&'a Connection> {
     conns
         .get(name)
         .ok_or_else(|| ConnectionError::ConnectionDoesNotExist.into())
 }
 
-fn get_default_connection(
-    conns: &HashMap<String, Connection>,
-) -> Result<&Connection, Box<dyn Error>> {
+fn get_default_connection(conns: &HashMap<String, Connection>) -> Result<&Connection> {
     for conn in conns.values() {
         if conn.default {
             return Ok(conn);
@@ -88,11 +83,10 @@ pub(crate) fn read_connections() -> Option<HashMap<String, Connection>> {
     None
 }
 
-pub(crate) fn write_connections(conns: HashMap<String, Connection>) -> Result<(), Box<dyn Error>> {
+pub(crate) fn write_connections(conns: &HashMap<String, Connection>) -> Result<()> {
     let Some(proj_dir) = ProjectDirs::from("com", "jvarey", "mgfy") else {
         return Err(ConnectionError::WriteConnection.into());
     };
-    //fs::create_dir_all(proj_dir.data_dir()).expect("Could not create data directory");
     fs::create_dir_all(proj_dir.data_dir())?;
     let fname = proj_dir.data_dir().join("connections.json");
 

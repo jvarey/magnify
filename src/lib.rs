@@ -7,10 +7,10 @@ use crate::{
     cli::{Cli, Commands, ConnectedCommands, StandaloneCommands},
     connections::Connection,
 };
+use anyhow::Result;
 use clap::Parser;
-use std::error::Error;
 
-pub fn main() -> Result<(), Box<dyn Error>> {
+pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -19,24 +19,24 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             let client = conn.connect()?;
             match cmd {
                 ConnectedCommands::EstimateDocumentCount { db, coll } => {
-                    commands::estimate_document_count(&db, &coll, client)?
+                    commands::estimate_document_count(&db, &coll, &client)?;
                 }
-                ConnectedCommands::Example { db, coll } => commands::example(&db, &coll, client)?,
+                ConnectedCommands::Example { db, coll } => commands::example(&db, &coll, &client)?,
                 ConnectedCommands::ExampleFiltered { db, coll, filter } => {
-                    commands::example_filtered(&db, &coll, &filter, client)?
+                    commands::example_filtered(&db, &coll, &filter, &client)?;
                 }
                 ConnectedCommands::ListCollections { db } => {
-                    commands::list_collections(&db, client)?
+                    commands::list_collections(&db, &client)?;
                 }
                 ConnectedCommands::ListCollectionDetails { db } => {
-                    commands::list_collection_details(&db, client)?
+                    commands::list_collection_details(&db, &client)?;
                 }
-                ConnectedCommands::ListDatabases => commands::list_databases(client)?,
+                ConnectedCommands::ListDatabases => commands::list_databases(&client)?,
             }
         }
         Commands::Standalone(cmd) => match cmd {
             StandaloneCommands::CreateConnection(opts) => commands::create_connection(opts)?,
-            StandaloneCommands::ListConnections => commands::list_connections()?,
+            StandaloneCommands::ListConnections => commands::list_connections(),
         },
     }
     Ok(())

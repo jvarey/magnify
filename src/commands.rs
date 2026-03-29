@@ -1,15 +1,15 @@
 use crate::cli::CreateConnectionArgs;
-use crate::connections::{Connection, read_connections, write_connections};
+use crate::connections::{read_connections, write_connections, Connection};
 use crate::errors::ConnectionError;
+use anyhow::{anyhow, Context, Result};
 use mongodb::{
-    bson::{self, Document, doc, to_document},
+    bson::{self, doc, to_document, Document},
     sync::{Client, Collection, Database},
 };
 use serde_json::Value;
-use std::error::Error;
 use tabled::{
+    settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
-    settings::{Alignment, Settings, Style, object::Rows},
 };
 
 #[derive(Tabled)]
@@ -25,7 +25,7 @@ struct DetailRow {
 }
 
 impl DetailRow {
-    fn try_new(db: &Database, name: &str) -> Result<Self, Box<dyn Error>> {
+    fn try_new(db: &Database, name: &str) -> Result<Self> {
         let cmd = doc! { "collStats": name, "scale": 1 };
         let coll: Collection<Document> = db.collection(name);
         let stats = db.run_command(cmd).run()?;
@@ -36,19 +36,19 @@ impl DetailRow {
         let storage_size = stats
             .get("storageSize")
             .and_then(|v| match v {
-                bson::Bson::Int32(n) => Some(*n as i64),
+                bson::Bson::Int32(n) => Some(i64::from(*n)),
                 bson::Bson::Int64(n) => Some(*n),
                 _ => None,
             })
-            .ok_or("storageSize missing or not numeric")?;
+            .ok_or(anyhow!("storageSize missing or not numeric"))?;
         let size = stats
             .get("size")
             .and_then(|v| match v {
-                bson::Bson::Int32(n) => Some(*n as i64),
+                bson::Bson::Int32(n) => Some(i64::from(*n)),
                 bson::Bson::Int64(n) => Some(*n),
                 _ => None,
             })
-            .ok_or("size missing or not numeric")?;
+            .ok_or(anyhow!("size missing or not numeric"))?;
         Ok(Self {
             name: name.to_owned(),
             count: coll.estimated_document_count().run()?,
@@ -58,13 +58,13 @@ impl DetailRow {
     }
 }
 
-pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<(), Box<dyn Error>> {
+pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<()> {
     let mut conns = read_connections().unwrap_or_default();
     let mut new_conn = Connection::from_opts(opts);
 
     if conns.contains_key(&new_conn.name) {
         return Err(ConnectionError::ConnectionExists.into());
-    };
+    }
 
     // if there aren't any connections then this new one has to be the default
     if conns.is_empty() {
@@ -75,14 +75,14 @@ pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<(), Box<dy
     // if the new connection is set to default then we need to make sure all the other connections
     // are not default
     if new_conn.default {
-        for (_name, conn) in conns.iter_mut() {
+        for conn in conns.values_mut() {
             conn.default = false;
         }
     }
 
     // update the connections hashmap and write it back to the filesystem
     conns.insert(new_conn.name.clone(), new_conn);
-    write_connections(conns)?;
+    write_connections(&conns)?;
 
     Ok(())
 }
@@ -92,7 +92,7 @@ fn bytes_to_string(size: i64) -> String {
     for (i, unit) in units.iter().enumerate() {
         if size / (1024_i64).pow(i as u32 + 1) == 0 {
             let sizef = size as f64 / (1024_i64.pow(i as u32) as f64);
-            return format!("{:.2}{}", sizef, unit);
+            return format!("{sizef:.2}{unit}");
         }
     }
 
@@ -101,11 +101,7 @@ fn bytes_to_string(size: i64) -> String {
     format!("{:.2}{}", sizef, units[5])
 }
 
-pub(crate) fn estimate_document_count(
-    dbname: &str,
-    collname: &str,
-    client: Client,
-) -> mongodb::error::Result<()> {
+pub(crate) fn estimate_document_count(dbname: &str, collname: &str, client: &Client) -> Result<()> {
     let db = client.database(dbname);
     let coll: Collection<Document> = db.collection(collname);
     let value = coll.estimated_document_count().run()?;
@@ -113,11 +109,11 @@ pub(crate) fn estimate_document_count(
     Ok(())
 }
 
-pub(crate) fn example(dbname: &str, collname: &str, client: Client) -> mongodb::error::Result<()> {
+pub(crate) fn example(dbname: &str, collname: &str, client: &Client) -> Result<()> {
     let db = client.database(dbname);
     let coll: Collection<Document> = db.collection(collname);
     if let Some(example) = coll.find_one(doc! {}).run()? {
-        for (key, value) in example.iter() {
+        for (key, value) in &example {
             println!("  {key}: {value}");
         }
     } else {
@@ -130,14 +126,14 @@ pub(crate) fn example_filtered(
     dbname: &str,
     collname: &str,
     filter: &str,
-    client: Client,
-) -> mongodb::error::Result<()> {
+    client: &Client,
+) -> Result<()> {
     let db = client.database(dbname);
     let coll: Collection<Document> = db.collection(collname);
     let doc =
         string_to_bson_doc(filter).expect("Could not convert given string to a bson Document");
     if let Some(example) = coll.find_one(doc).run()? {
-        for (key, value) in example.iter() {
+        for (key, value) in &example {
             println!("  {key}: {value}");
         }
     } else {
@@ -146,7 +142,7 @@ pub(crate) fn example_filtered(
     Ok(())
 }
 
-pub(crate) fn list_collection_details(dbname: &str, client: Client) -> Result<(), Box<dyn Error>> {
+pub(crate) fn list_collection_details(dbname: &str, client: &Client) -> Result<()> {
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
     let mut rows = Vec::new();
@@ -159,24 +155,24 @@ pub(crate) fn list_collection_details(dbname: &str, client: Client) -> Result<()
     let mut table = Table::new(rows);
     table.with(table_config);
     table.modify(Rows::first(), Alignment::center());
-    println!("{}", table);
+    println!("{table}");
     Ok(())
 }
 
-pub(crate) fn list_collections(dbname: &str, client: Client) -> mongodb::error::Result<()> {
+pub(crate) fn list_collections(dbname: &str, client: &Client) -> Result<()> {
     let db = client.database(dbname);
     let names = db.list_collection_names().run()?;
-    if !names.is_empty() {
+    if names.is_empty() {
+        println!("No collections in {dbname}");
+    } else {
         for (i, name) in names.iter().enumerate() {
             println!("  {}) {}", i + 1, name);
         }
-    } else {
-        println!("No collections in {dbname}");
     }
     Ok(())
 }
 
-pub(crate) fn list_connections() -> Result<(), Box<dyn Error>> {
+pub(crate) fn list_connections() {
     if let Some(conns) = read_connections() {
         let rows = conns.values();
         let table_config = Settings::default()
@@ -185,14 +181,13 @@ pub(crate) fn list_connections() -> Result<(), Box<dyn Error>> {
         let mut table = Table::new(rows);
         table.with(table_config);
         table.modify(Rows::first(), Alignment::center());
-        println!("{}", table);
+        println!("{table}");
     } else {
         println!("No connections found");
     }
-    Ok(())
 }
 
-pub(crate) fn list_databases(client: Client) -> mongodb::error::Result<()> {
+pub(crate) fn list_databases(client: &Client) -> Result<()> {
     let db_names = client.list_database_names().run()?;
     for (i, db) in db_names.iter().enumerate() {
         println!("  {}) {}", i + 1, db);
@@ -200,11 +195,11 @@ pub(crate) fn list_databases(client: Client) -> mongodb::error::Result<()> {
     Ok(())
 }
 
-pub(crate) fn string_to_bson_doc(s: &str) -> Result<Document, Box<dyn std::error::Error>> {
+pub(crate) fn string_to_bson_doc(s: &str) -> Result<Document> {
     let json_value: Value = serde_json::from_str(s)
-        .map_err(|e| format!("Failed to parse JSON string: {}; Filter string: {}", e, s))?;
+        .with_context(|| format!("Failed to parse JSON string; Filter string: {s}"))?;
     let bson_document: Document = to_document(&json_value)
-        .map_err(|e| format!("Failed to convert JSON Value to BSON Document: {}", e))?;
+        .with_context(|| "Failed to convert JSON Value to BSON Document")?;
     Ok(bson_document)
 }
 
