@@ -39,15 +39,13 @@ There are a few commands for managing connections, they are:
 ## Usage
 
 There are a number of commands that are built into `mgfy` so far:
-  1) `estimate-document-count`: will return the document count from the
+  1) `collections`: lists the collections in a database with optional details
+  2) `estimate-document-count`: will return the document count from the
   collection metadata
-  2) `example`: gets an example document from the collection without filtering
-  3) `exmaple-filtered`: gets an example document from the collection after
+  3) `example`: gets an example document from the collection without filtering
+  4) `exmaple-filtered`: gets an example document from the collection after
   filtering on the user-provided query
-  4) `list-collection-details`: returns the name, document count, size, and
-  allocated storage for each collection in a database
-  5) `list-collections`: returns the name of all the collections in a database
-  6) `list-databases`: returns all of the database names
+  5) `list-databases`: returns all of the database names
 
 Here's the help text:
 ```shell
@@ -57,20 +55,19 @@ A command line tool for inspecting MongoDB
 Usage: mgfy [OPTIONS] <COMMAND>
 
 Commands:
-  create-connection        Create a new connection
+  collections              List collections, optionally with more information
   estimate-document-count  Returns the document count in the metadata for the collection
   example                  Get an example document
   example-filtered         Get an example document after filtering
-  list-collection-details  Get detailed information on each collection
-  list-collections         List the collections in a database
-  list-connections         List connections
   list-databases           List the databases
+  create-connection        Create a new connection
+  list-connections         List connections
   help                     Print this message or the help of the given subcommand(s)
 
 Options:
   -n, --name <NAME>  Name of the connection to use (see list-connections command)
   -h, --help         Print help
-  -V, --version      Print versio
+  -V, --version      Print version
 ```
 
 ## Filtering
