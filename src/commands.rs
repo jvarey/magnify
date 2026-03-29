@@ -1,5 +1,5 @@
 use crate::cli::CreateConnectionArgs;
-use crate::connections::{Connection, read_connections, write_connections};
+use crate::connections::{Connection, ConnectionDisplay, read_connections, write_connections};
 use crate::errors::ConnectionError;
 use anyhow::{Context, Result};
 use mongodb::{
@@ -156,10 +156,15 @@ pub(crate) fn example_filtered(
 
 pub(crate) fn list_connections() {
     if let Some(conns) = read_connections() {
-        let rows = conns.values();
+        let mut conns: Vec<&Connection> = conns.values().collect();
+        conns.sort_by_key(|c| !c.default);
+        let rows: Vec<ConnectionDisplay> = conns
+            .iter()
+            .map(|c| ConnectionDisplay::from_connection(c))
+            .collect();
         let table_config = Settings::default()
             .with(Style::modern_rounded())
-            .with(Alignment::right());
+            .with(Alignment::center());
         let mut table = Table::new(rows);
         table.with(table_config);
         table.modify(Rows::first(), Alignment::center());

@@ -9,17 +9,12 @@ use std::fs;
 use std::io::{BufWriter, Write};
 use tabled::Tabled;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Tabled)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Connection {
-    #[tabled(rename = "Name")]
     pub(crate) name: String,
-    #[tabled(rename = "Host")]
     pub(crate) host: String,
-    #[tabled(rename = "Port")]
     pub(crate) port: u16,
-    #[tabled(rename = "Protocol")]
     pub(crate) protocol: String,
-    #[tabled(rename = "Default")]
     pub(crate) default: bool,
 }
 
@@ -54,6 +49,40 @@ impl Connection {
 
     pub(crate) fn connect(&self) -> mongodb::error::Result<Client> {
         Client::with_uri_str(self.to_uri())
+    }
+}
+
+#[derive(Debug, Clone, Tabled)]
+pub(crate) struct ConnectionDisplay {
+    #[tabled(rename = "Default")]
+    pub(crate) default: String,
+    #[tabled(rename = "Name")]
+    pub(crate) name: String,
+    #[tabled(rename = "Host")]
+    pub(crate) host: String,
+    #[tabled(rename = "Port")]
+    pub(crate) port: u16,
+    #[tabled(rename = "Protocol")]
+    pub(crate) protocol: String,
+}
+
+impl ConnectionDisplay {
+    pub(crate) fn from_connection(conn: &Connection) -> Self {
+        Self {
+            default: Self::default_string(conn.default),
+            name: conn.name.clone(),
+            host: conn.host.clone(),
+            port: conn.port,
+            protocol: conn.protocol.clone(),
+        }
+    }
+
+    fn default_string(default: bool) -> String {
+        if default {
+            "✅".to_string()
+        } else {
+            "".to_string()
+        }
     }
 }
 
