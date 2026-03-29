@@ -1,16 +1,24 @@
 use crate::cli::CreateConnectionArgs;
-use crate::connections::{read_connections, write_connections, Connection};
+use crate::connections::{Connection, read_connections, write_connections};
 use crate::errors::ConnectionError;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use mongodb::{
-    bson::{self, doc, to_document, Document},
+    bson::{self, Document, doc, to_document},
     sync::{Client, Collection, Database},
 };
+use serde::{self, Deserialize};
 use serde_json::Value;
 use tabled::{
-    settings::{object::Rows, Alignment, Settings, Style},
     Table, Tabled,
+    settings::{Alignment, Settings, Style, object::Rows},
 };
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Stats {
+    storage_size: i64,
+    size: i64,
+}
 
 #[derive(Tabled)]
 struct DetailRow {
@@ -28,31 +36,13 @@ impl DetailRow {
     fn try_new(db: &Database, name: &str) -> Result<Self> {
         let cmd = doc! { "collStats": name, "scale": 1 };
         let coll: Collection<Document> = db.collection(name);
-        let stats = db.run_command(cmd).run()?;
-        // ordinarily we would just do `stats.get_i32("storageSize")?`, but the result has a decent
-        // chance of overflowing an i32. if it would overflow, mongo actually saves sizes as i64.
-        // this way we always get an i64 out of mongo.
-        let storage_size = stats
-            .get("storageSize")
-            .and_then(|v| match v {
-                bson::Bson::Int32(n) => Some(i64::from(*n)),
-                bson::Bson::Int64(n) => Some(*n),
-                _ => None,
-            })
-            .ok_or(anyhow!("storageSize missing or not numeric"))?;
-        let size = stats
-            .get("size")
-            .and_then(|v| match v {
-                bson::Bson::Int32(n) => Some(i64::from(*n)),
-                bson::Bson::Int64(n) => Some(*n),
-                _ => None,
-            })
-            .ok_or(anyhow!("size missing or not numeric"))?;
+        let stats_bson = db.run_command(cmd).run()?;
+        let stats: Stats = bson::from_bson(stats_bson.into())?;
         Ok(Self {
             name: name.to_owned(),
             count: coll.estimated_document_count().run()?,
-            size: bytes_to_string(size),
-            storage_size: bytes_to_string(storage_size),
+            size: bytes_to_string(stats.size),
+            storage_size: bytes_to_string(stats.storage_size),
         })
     }
 }
