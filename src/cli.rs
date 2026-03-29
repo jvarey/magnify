@@ -21,6 +21,15 @@ pub(crate) enum Commands {
 
 #[derive(Subcommand)]
 pub(crate) enum ConnectedCommands {
+    /// List collections, optionally with more information
+    Collections {
+        /// Database name
+        db: String,
+        /// Flag to return more information
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
+    },
+
     /// Returns the document count in the metadata for the collection
     EstimateDocumentCount {
         /// Database name
@@ -47,18 +56,6 @@ pub(crate) enum ConnectedCommands {
         filter: String,
     },
 
-    /// Get detailed information on each collection
-    ListCollectionDetails {
-        /// Database name
-        db: String,
-    },
-
-    /// List the collections in a database
-    ListCollections {
-        /// Database name
-        db: String,
-    },
-
     /// List the databases
     ListDatabases,
 }
@@ -80,7 +77,7 @@ pub(crate) struct CreateConnectionArgs {
     pub(crate) host: String,
     /// Port
     #[arg(long)]
-    pub(crate) port: i32,
+    pub(crate) port: u16,
     /// Protocol
     #[arg(long, default_value = "mongodb")]
     pub(crate) protocol: String,

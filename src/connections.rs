@@ -16,7 +16,7 @@ pub(crate) struct Connection {
     #[tabled(rename = "Host")]
     pub(crate) host: String,
     #[tabled(rename = "Port")]
-    pub(crate) port: i32,
+    pub(crate) port: u16,
     #[tabled(rename = "Protocol")]
     pub(crate) protocol: String,
     #[tabled(rename = "Default")]

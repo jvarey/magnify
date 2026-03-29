@@ -18,6 +18,9 @@ pub fn main() -> Result<()> {
             let conn = Connection::from_name(cli.name.as_deref())?;
             let client = conn.connect()?;
             match cmd {
+                ConnectedCommands::Collections { db, verbose } => {
+                    commands::collections(&db, verbose, &client)?;
+                }
                 ConnectedCommands::EstimateDocumentCount { db, coll } => {
                     commands::estimate_document_count(&db, &coll, &client)?;
                 }
@@ -25,12 +28,12 @@ pub fn main() -> Result<()> {
                 ConnectedCommands::ExampleFiltered { db, coll, filter } => {
                     commands::example_filtered(&db, &coll, &filter, &client)?;
                 }
-                ConnectedCommands::ListCollections { db } => {
-                    commands::list_collections(&db, &client)?;
-                }
-                ConnectedCommands::ListCollectionDetails { db } => {
-                    commands::list_collection_details(&db, &client)?;
-                }
+                //ConnectedCommands::ListCollections { db } => {
+                //    commands::list_collections(&db, &client)?;
+                //}
+                //ConnectedCommands::ListCollectionDetails { db } => {
+                //    commands::list_collection_details(&db, &client)?;
+                //}
                 ConnectedCommands::ListDatabases => commands::list_databases(&client)?,
             }
         }

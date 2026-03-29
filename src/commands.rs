@@ -29,7 +29,6 @@ impl DetailRow {
         let cmd = doc! { "collStats": name, "scale": 1 };
         let coll: Collection<Document> = db.collection(name);
         let stats = db.run_command(cmd).run()?;
-        let _ = dbg!(stats.get("storageSize"));
         // ordinarily we would just do `stats.get_i32("storageSize")?`, but the result has a decent
         // chance of overflowing an i32. if it would overflow, mongo actually saves sizes as i64.
         // this way we always get an i64 out of mongo.
@@ -56,6 +55,29 @@ impl DetailRow {
             storage_size: bytes_to_string(storage_size),
         })
     }
+}
+
+pub(crate) fn collections(dbname: &str, verbose: bool, client: &Client) -> Result<()> {
+    let db = client.database(dbname);
+    let names = db.list_collection_names().run()?;
+    if verbose {
+        let mut rows = Vec::new();
+        for name in &names {
+            rows.push(DetailRow::try_new(&db, name)?);
+        }
+        let table_config = Settings::default()
+            .with(Style::modern_rounded())
+            .with(Alignment::right());
+        let mut table = Table::new(rows);
+        table.with(table_config);
+        table.modify(Rows::first(), Alignment::center());
+        println!("{table}");
+    } else {
+        for name in &names {
+            println!("{name}");
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn create_connection(opts: CreateConnectionArgs) -> Result<()> {
@@ -138,36 +160,6 @@ pub(crate) fn example_filtered(
         }
     } else {
         println!("No documents in {dbname}.{collname} matched the filter");
-    }
-    Ok(())
-}
-
-pub(crate) fn list_collection_details(dbname: &str, client: &Client) -> Result<()> {
-    let db = client.database(dbname);
-    let names = db.list_collection_names().run()?;
-    let mut rows = Vec::new();
-    for name in &names {
-        rows.push(DetailRow::try_new(&db, name)?);
-    }
-    let table_config = Settings::default()
-        .with(Style::modern_rounded())
-        .with(Alignment::right());
-    let mut table = Table::new(rows);
-    table.with(table_config);
-    table.modify(Rows::first(), Alignment::center());
-    println!("{table}");
-    Ok(())
-}
-
-pub(crate) fn list_collections(dbname: &str, client: &Client) -> Result<()> {
-    let db = client.database(dbname);
-    let names = db.list_collection_names().run()?;
-    if names.is_empty() {
-        println!("No collections in {dbname}");
-    } else {
-        for (i, name) in names.iter().enumerate() {
-            println!("  {}) {}", i + 1, name);
-        }
     }
     Ok(())
 }
