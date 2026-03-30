@@ -103,8 +103,17 @@ fn bytes_to_string(size: i64) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
     for (i, unit) in units.iter().enumerate() {
         if size / (1024_i64).pow(i as u32 + 1) == 0 {
-            let sizef = size as f64 / (1024_i64.pow(i as u32) as f64);
-            return format!("{sizef:.2}{unit}");
+            // size is less than the next increment
+            if i == 0 {
+                // size is an integer number of bytes
+                return format!("{size}B");
+            } else {
+                // convert to float even if it is an even multiple of 1024
+                // e.g. 2048 Bytes would be exactly 2KB, but we'll just write 2.00 KB
+                // to maintain equal precision for all other format strings
+                let sizef = size as f64 / (1024_i64.pow(i as u32) as f64);
+                return format!("{sizef:.2}{unit}");
+            }
         }
     }
 
@@ -196,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_bytes_to_string() {
-        assert_eq!(bytes_to_string(966), String::from("966.00B"));
+        assert_eq!(bytes_to_string(966), String::from("966B"));
         assert_eq!(bytes_to_string(1567), String::from("1.53KB"));
         assert_eq!(bytes_to_string(1567893), String::from("1.50MB"));
     }
